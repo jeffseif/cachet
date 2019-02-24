@@ -9,7 +9,7 @@ import sqlite3
 import time
 
 
-the_cache = None
+DEFAULT_TTL_SECONDS = 60
 
 
 class CacheMissException(Exception):
@@ -26,9 +26,8 @@ class ExpiredKeyException(Exception):
 
 class GenericCache:
 
-    ttl = 60
-
-    def __init__(self, function):
+    def __init__(self, function, ttl):
+        self.ttl = ttl
         module = inspect.getmodule(function)
         self.args_prefix = (
             module.__name__ if module is not None else None,
@@ -37,7 +36,7 @@ class GenericCache:
 
     @property
     def expiration(self):
-        return time.time() + self.ttl
+        return self.now + self.ttl
 
     @property
     def now(self):
@@ -45,7 +44,6 @@ class GenericCache:
 
     @functools.lru_cache(maxsize=None)
     def args_to_key(self, *args, **kwargs):
-        print((self.args_prefix, args, kwargs))
         pickle_string = pickle.dumps((self.args_prefix, args, kwargs))
         return hashlib.md5(pickle_string).hexdigest()
 
@@ -173,26 +171,29 @@ class Sqlite3Cache(GenericCache):
         self.cursor.execute(self.SET_SQL, (key, pickle.dumps(value), self.expiration))
 
 
-def cache_decorator(cache_class, function):
+def cache_decorator(cache_class, ttl_seconds=DEFAULT_TTL_SECONDS):
 
-    global the_cache
-    the_cache = cache_class(function)
+    def decorator(function):
 
-    def cache_loop(*args, **kwargs):
-        key = the_cache.args_to_key(*args, **kwargs)
+        the_cache = cache_class(function, ttl_seconds)
 
-        try:
-            result = the_cache[key]
-        except (CacheMissException, ExpiredKeyException) as e:
+        def cache_loop(*args, **kwargs):
+            key = the_cache.args_to_key(*args, **kwargs)
+
             try:
-                result = function(*args, **kwargs)
-                the_cache[key] = result
-            except DontCacheException as e:
-                print(e)
-                result = None
-        return result
+                result = the_cache[key]
+            except (CacheMissException, ExpiredKeyException) as e:
+                try:
+                    result = function(*args, **kwargs)
+                    the_cache[key] = result
+                except DontCacheException as e:
+                    print(e)
+                    result = None
+            return result
 
-    return cache_loop
+        return cache_loop
+
+    return decorator
 
 
 dict_cache = functools.partial(cache_decorator, DictCache)
@@ -201,27 +202,20 @@ sqlite3_cache = functools.partial(cache_decorator, Sqlite3Cache)
 
 
 COUNT = 0
-@io_cache
-def count(a=None):
+@io_cache(ttl_seconds=1)
+def count():
     global COUNT
     COUNT += 1
     return COUNT
+
+@io_cache(ttl_seconds=1)
+def count2():
+    print('jeff')
 
 for _ in range(5):
     print(count())
     time.sleep(0.5)
 
 for _ in range(5):
-    print(count(None))
+    print(count2())
     time.sleep(0.5)
-
-print()
-print(len(the_cache))
-for each in the_cache:
-    print(each)
-print(() in the_cache)
-print((None, ) in the_cache)
-time.sleep(1)
-print(() in the_cache)
-print((None, ) in the_cache)
-print(len(the_cache))
