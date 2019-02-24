@@ -1,2 +1,4 @@
 - Pass TTL to decorator arg
 - Move end-to-end to unit tests
+- README
+- Package it up
