@@ -1,3 +1,7 @@
-- Move end-to-end to unit tests
-- README
+- Comment on instances / collisions w/ many cached functions
 - Package it up
+  - README
+  - Setup, Makefile, tox
+  - Move end-to-end to unit tests
+  - Make sure that importing is clean
+  - Replace in other repos

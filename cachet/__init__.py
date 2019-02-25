@@ -9,9 +9,6 @@ import sqlite3
 import time
 
 
-DEFAULT_TTL_SECONDS = 60
-
-
 class CacheMissException(Exception):
     pass
 
@@ -34,6 +31,22 @@ class GenericCache:
             function.__qualname__,
         )
 
+    def __contains__(self, args):
+        try:
+            self[self.args_to_key(*args)]
+            return True
+        except (CacheMissException, ExpiredKeyException) as e:
+            return False
+
+    @functools.lru_cache(maxsize=None)
+    def args_to_key(self, *args, **kwargs):
+        pickle_string = pickle.dumps((self.args_prefix, args, kwargs))
+        return hashlib.md5(pickle_string).hexdigest()
+
+    def bust(self):
+        for k, v in list(self):
+            del self[k]
+
     @property
     def expiration(self):
         return self.now + self.ttl
@@ -41,18 +54,6 @@ class GenericCache:
     @property
     def now(self):
         return time.time()
-
-    @functools.lru_cache(maxsize=None)
-    def args_to_key(self, *args, **kwargs):
-        pickle_string = pickle.dumps((self.args_prefix, args, kwargs))
-        return hashlib.md5(pickle_string).hexdigest()
-
-    def __contains__(self, args):
-        try:
-            self[self.args_to_key(*args)]
-            return True
-        except (CacheMissException, ExpiredKeyException) as e:
-            return False
 
 
 class DictCache(GenericCache):
@@ -73,9 +74,8 @@ class DictCache(GenericCache):
         return pickle.loads(value)
 
     def __iter__(self):
-        for key, (value, expiration) in self.kv.items():
-            if expiration >= self.now:
-                yield key, pickle.loads(value)
+        for key, (value, _) in self.kv.items():
+            yield key, pickle.loads(value)
 
     def __len__(self):
         return len(self.kv)
@@ -91,8 +91,7 @@ class IOCache(GenericCache):
     def key_to_filename(key):
         return '.'.join(('', 'cache', key, 'gz'))
 
-    def __delitem__(self, key):
-        filename = self.key_to_filename(key)
+    def __delitem__(self, filename):
         os.remove(filename)
 
     def __getitem__(self, key):
@@ -111,9 +110,8 @@ class IOCache(GenericCache):
     def __iter__(self):
         for filename in glob.glob('./.cache.*.gz'):
             with gzip.open(filename, 'rb') as f:
-                value, expiration = pickle.load(f)
-                if expiration >= self.now:
-                    yield filename, value
+                value, _ = pickle.load(f)
+                yield filename, value
 
     def __len__(self):
         return len(glob.glob('./.cache.*.gz'))
@@ -124,31 +122,32 @@ class IOCache(GenericCache):
             pickle.dump((value, self.expiration), f)
 
 
-class Sqlite3Cache(GenericCache):
+class SqliteCache(GenericCache):
 
-    conn = None
-    filename = os.path.abspath('.cache')
+    DEFAULT_FILENAME = '.cache.sqlite'
 
     CONTAINS_SQL = 'SELECT COUNT(*) FROM kv WHERE (k = ?) AND (e > ?) ;'
     CREATE_SQL = 'CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v BLOB, e FLOAT) ;'
     DEL_SQL = 'DELETE FROM kv WHERE (k = ?) ;'
     GET_SQL = 'SELECT v, e FROM kv WHERE (k = ?) ;'
-    ITER_SQL = 'SELECT k, v FROM kv WHERE (e > ?) ;'
+    ITER_SQL = 'SELECT k, v FROM kv ;'
     LEN_SQL = 'SELECT COUNT(*) FROM kv ;'
     SET_SQL = 'INSERT OR REPLACE INTO kv (k, v, e) VALUES (?, ?, ?) ;'
 
-    @property
-    def cursor(self):
-        if self.conn is None:
-            self.conn = sqlite3.connect(self.filename)
-            self.conn.execute(self.CREATE_SQL)
-        return self.conn.cursor()
+    def __init__(self, *args, **kwargs):
+        filename = kwargs.pop('filename', self.DEFAULT_FILENAME)
+        super().__init__(*args, **kwargs)
+        self.conn = sqlite3.connect(filename)
+        self.conn.execute(self.CREATE_SQL)
+        self.conn.commit()
 
     def select_query(self, sql, *args):
-        yield from self.cursor.execute(sql, args)
+        with self.conn as c:
+            yield from c.execute(sql, args)
 
     def __delitem__(self, key):
-        self.cursor.execute(self.DEL_SQL, (key, ))
+        with self.conn as c:
+            c.execute(self.DEL_SQL, (key, ))
 
     def __getitem__(self, key):
         try:
@@ -160,7 +159,7 @@ class Sqlite3Cache(GenericCache):
             raise CacheMissException
 
     def __iter__(self):
-        for key, value in self.select_query(self.ITER_SQL, self.now):
+        for key, value in self.select_query(self.ITER_SQL):
             yield key, pickle.loads(value)
 
     def __len__(self):
@@ -168,16 +167,15 @@ class Sqlite3Cache(GenericCache):
         return length
 
     def __setitem__(self, key, value):
-        self.cursor.execute(self.SET_SQL, (key, pickle.dumps(value), self.expiration))
+        with self.conn as c:
+            c.execute(self.SET_SQL, (key, pickle.dumps(value), self.expiration))
 
 
-def cache_decorator(cache_class, ttl_seconds=DEFAULT_TTL_SECONDS):
+def cache_decorator(cache_class, ttl, **kwargs):
 
     def decorator(function):
 
-        the_cache = cache_class(function, ttl_seconds)
-
-        def cache_loop(*args, **kwargs):
+        def returned(*args, **kwargs):
             key = the_cache.args_to_key(*args, **kwargs)
 
             try:
@@ -191,31 +189,63 @@ def cache_decorator(cache_class, ttl_seconds=DEFAULT_TTL_SECONDS):
                     result = None
             return result
 
-        return cache_loop
+        returned.__cache__ = the_cache = cache_class(function, ttl, **kwargs)
+
+        return returned
 
     return decorator
 
 
 dict_cache = functools.partial(cache_decorator, DictCache)
 io_cache = functools.partial(cache_decorator, IOCache)
-sqlite3_cache = functools.partial(cache_decorator, Sqlite3Cache)
+sqlite_cache = functools.partial(cache_decorator, SqliteCache)
 
 
 COUNT = 0
-@io_cache(ttl_seconds=1)
+@sqlite_cache(ttl=1, filename=':memory:')
 def count():
     global COUNT
     COUNT += 1
     return COUNT
 
-@io_cache(ttl_seconds=1)
-def count2():
-    print('jeff')
-
 for _ in range(5):
     print(count())
     time.sleep(0.5)
 
+print(len(count.__cache__), list(count.__cache__))
+count.__cache__.bust()
+print(len(count.__cache__))
+
+@sqlite_cache(ttl=1)
+def count2():
+    print('jeff')
+
 for _ in range(5):
     print(count2())
+    time.sleep(0.5)
+
+print(len(count2.__cache__), list(count2.__cache__))
+
+@sqlite_cache(ttl=1)
+def count3():
+    print('seif')
+
+for _ in range(5):
+    print(count3())
+    time.sleep(0.5)
+
+print(len(count3.__cache__), list(count3.__cache__))
+
+class Person:
+    def __init__(self, age):
+        self.age = age
+
+    @dict_cache(ttl=1)
+    def add_year(self):
+        self.age += 1
+        return self.age
+
+person = Person(age=5)
+for _ in range(5):
+    print(person.add_year())
     time.sleep(0.5)

@@ -14,5 +14,5 @@ venv/
 .*.gz
 *.png
 *.xml
-.cache
+*.sqlite
 .cache.*.gz
