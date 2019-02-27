@@ -9,6 +9,9 @@ import sqlite3
 import time
 
 
+DEFAULT_TTL = 24 * 60 * 60
+
+
 class CacheMissException(Exception):
     pass
 
@@ -23,13 +26,17 @@ class ExpiredKeyException(Exception):
 
 class GenericCache:
 
+    __salt = b''
+    __expires = __hits = __misses = 0
+
     def __init__(self, function, ttl):
         self.ttl = ttl
         module = inspect.getmodule(function)
-        self.args_prefix = (
-            module.__name__ if module is not None else None,
-            function.__qualname__,
+        __salt = self.args_to_key(
+            module=module.__name__ if module is not None else '',
+            qualname=function.__qualname__,
         )
+        self.__salt = bytes(__salt, 'utf8')
 
     def __contains__(self, args):
         try:
@@ -38,14 +45,41 @@ class GenericCache:
         except (CacheMissException, ExpiredKeyException) as e:
             return False
 
+    def __getitem(self, key):
+        raise NotImplementedError
+
+    def __getitem__(self, key):
+        try:
+            value = self._getitem(key)
+            self.__hits +=1
+            return value
+        except CacheMissException as e:
+            self.__misses += 1
+            raise e
+        except ExpiredKeyException as e:
+            self.__expires += 1
+            raise e
+
     @functools.lru_cache(maxsize=None)
     def args_to_key(self, *args, **kwargs):
-        pickle_string = pickle.dumps((self.args_prefix, args, kwargs))
-        return hashlib.md5(pickle_string).hexdigest()
+        return hashlib.blake2b(
+            pickle.dumps((args, kwargs)),
+            digest_size=8,
+            salt=self.__salt,
+        ).hexdigest()
 
     def bust(self):
         for k, v in list(self):
             del self[k]
+
+    def info(self):
+        return {
+            'expires': self.__expires,
+            'hits': self.__hits,
+            'misses': self.__misses,
+            'salt': self.__salt,
+            'size': len(self),
+        }
 
     @property
     def expiration(self):
@@ -63,7 +97,7 @@ class DictCache(GenericCache):
     def __delitem__(self, key):
         del self.kv[key]
 
-    def __getitem__(self, key):
+    def _getitem(self, key):
         if key not in self.kv:
             raise CacheMissException
 
@@ -94,7 +128,7 @@ class IOCache(GenericCache):
     def __delitem__(self, filename):
         os.remove(filename)
 
-    def __getitem__(self, key):
+    def _getitem(self, key):
         filename = self.key_to_filename(key)
         if not os.path.isfile(filename):
             raise CacheMissException
@@ -149,7 +183,7 @@ class SqliteCache(GenericCache):
         with self.conn as c:
             c.execute(self.DEL_SQL, (key, ))
 
-    def __getitem__(self, key):
+    def _getitem(self, key):
         try:
             value, expiration = next(self.select_query(self.GET_SQL, key))
             if expiration < self.now:
@@ -171,10 +205,11 @@ class SqliteCache(GenericCache):
             c.execute(self.SET_SQL, (key, pickle.dumps(value), self.expiration))
 
 
-def cache_decorator(cache_class, ttl, **kwargs):
+def cache_decorator(cache_class, ttl=DEFAULT_TTL, **kwargs):
 
     def decorator(function):
 
+        @functools.wraps(function)
         def returned(*args, **kwargs):
             key = the_cache.args_to_key(*args, **kwargs)
 
@@ -212,9 +247,9 @@ for _ in range(5):
     print(count())
     time.sleep(0.5)
 
-print(len(count.__cache__), list(count.__cache__))
+print(count.__cache__.info(), list(count.__cache__))
 count.__cache__.bust()
-print(len(count.__cache__))
+print(count.__cache__.info())
 
 @sqlite_cache(ttl=1)
 def count2():
@@ -224,7 +259,7 @@ for _ in range(5):
     print(count2())
     time.sleep(0.5)
 
-print(len(count2.__cache__), list(count2.__cache__))
+print(count2.__cache__.info(), list(count2.__cache__))
 
 @sqlite_cache(ttl=1)
 def count3():
@@ -234,7 +269,7 @@ for _ in range(5):
     print(count3())
     time.sleep(0.5)
 
-print(len(count3.__cache__), list(count3.__cache__))
+print(count3.__cache__.info(), list(count3.__cache__))
 
 class Person:
     def __init__(self, age):

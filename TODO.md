@@ -1,6 +1,18 @@
-- Comment on instances / collisions w/ many cached functions
+- Features
+  - RR, LRU, and LFU options
+  - tmpdir
+- Tests
+  - For each cache, func/method
+    - After cache, function output is unchanged
+    - Function is not called
+    - After TTL, function is called again
+    - After diff module/function/args/kwargs, function is called again
+    - sqlite filename works, :memory: doesn't create a file
+    - bust works as expected
+    - len, iter, del, contains, works
 - Package it up
   - README
+  - Comment on instances / collisions w/ many cached functions
   - Setup, Makefile, tox
   - Move end-to-end to unit tests
   - Make sure that importing is clean
