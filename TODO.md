@@ -1,6 +1,10 @@
-- Features
-  - RR, LRU, and LFU options
+- Support maxsize: RR, LRU, and LFU
 - Package it up
   - Comment on instances / collisions w/ many cached functions
   - Make sure that importing is clean
   - Replace in other repos
+  - Comment on features
+    - functions, methods, staticmethods, classmethods
+    - dict, io, sqlite (file+mem)
+    - tmpdir (./)
+    - ttl (1 day)
