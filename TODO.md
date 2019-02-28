@@ -1,7 +1,6 @@
 - Features
   - RR, LRU, and LFU options
 - Package it up
-  - README
   - Comment on instances / collisions w/ many cached functions
   - Make sure that importing is clean
   - Replace in other repos
