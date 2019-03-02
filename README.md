@@ -9,7 +9,7 @@ Unburden your functions and grant them the **cachet** they deserve ... with cach
 - Two options for in-memory caching:
   - `dict_cache()`
   - `sqlite_cache(in_memory=True)`
-- Two options for on-disk caching in the `/tmp/` directory (modifiable at decoration -- `sqlite_cache(tmpdir=/tmp2/)`):
+- Two options for on-disk caching in the `/tmp/` directory (modifiable at decoration -- `sqlite_cache(tmpdir='/tmp2/')`):
   - `sqlite_cache()`
   - `io_cache()` (i.e., gzip'd pickle files)
 - One day TTL (modifiable at decoration -- `dict_cache(ttl=7 * 24 * 60 * 60)`)
