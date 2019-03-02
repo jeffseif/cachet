@@ -1,3 +1,0 @@
-- Support maxsize: RR, LRU, and LFU
-- Package it up
-  - Comment on instances / collisions w/ many cached functions

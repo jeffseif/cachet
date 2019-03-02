@@ -4,14 +4,16 @@ Unburden your functions and grant them the **cachet** they deserve ... with cach
 
 ## Features
 
-- Python function caches, provided as decorators
-- Utility for bare functions, class methods, staticmethods, and classmethods
-- A choice between three datastores:
-  - In-memory python `dict`
-  - "IO" (i.e., gzip'd pickle files)
-  - sqlite -- either in `:memory:` or on disk
-- TTL of 1 day by default (which may be changed at decoration time)
-- Cache storage at `/tmp/` (which may be changed at decoration time)
+- Memoization of Python functions via a cache provided by a convenient decorator
+- Works for bare functions, methods, `staticmethods`, and `classmethods`
+- Two options for in-memory caching:
+  - `dict_cache()`
+  - `sqlite_cache(in_memory=True)`
+- Two options for on-disk caching in the `/tmp/` directory (modifiable at decoration -- `sqlite_cache(tmpdir=/tmp2/)`):
+  - `sqlite_cache()`
+  - `io_cache()` (i.e., gzip'd pickle files)
+- One day TTL (modifiable at decoration -- `dict_cache(ttl=7 * 24 * 60 * 60)`)
+- Support for any number of functions at a time (collisions are avoided by seeding hashes with the module and function names)
 
 ## Install to the system
 
@@ -38,6 +40,8 @@ index 6b12258..cb27369 100644
 +        'https://github.com/jeffseif/cachet.git#egg=cachet',
 +    ],
 ```
+
+## Try it out
 
 ```python
 >>> from time import time
