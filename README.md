@@ -2,6 +2,17 @@
 
 Unburden your functions and grant them the **cachet** they deserve ... with caches!
 
+## Features
+
+- Python function caches, provided as decorators
+- Utility for bare functions, class methods, staticmethods, and classmethods
+- A choice between three datastores:
+  - In-memory python `dict`
+  - "IO" (i.e., gzip'd pickle files)
+  - sqlite -- either in `:memory:` or on disk
+- TTL of 1 day by default (which may be changed at decoration time)
+- Cache storage at `/tmp/` (which may be changed at decoration time)
+
 ## Install to the system
 
 ```bash
