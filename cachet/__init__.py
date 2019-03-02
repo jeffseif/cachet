@@ -1,6 +1,7 @@
 from cachet.cache import dict_cache  # noqa: F401
 from cachet.cache import io_cache  # noqa: F401
 from cachet.cache import sqlite_cache  # noqa: F401
+from cachet.exceptions import DontCacheException
 
 
 __author__ = 'Jeffrey Seifried'

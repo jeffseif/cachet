@@ -8,21 +8,13 @@ import pickle
 import sqlite3
 import time
 
+from cachet.exceptions import CacheMissException
+from cachet.exceptions import DontCacheException
+from cachet.exceptions import ExpiredKeyException
+
 
 DEFAULT_DIR = '/tmp'
 DEFAULT_TTL = 24 * 60 * 60
-
-
-class CacheMissException(Exception):
-    pass
-
-
-class DontCacheException(Exception):
-    pass
-
-
-class ExpiredKeyException(Exception):
-    pass
 
 
 class GenericCache:
