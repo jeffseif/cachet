@@ -1,12 +1,13 @@
-import mock
-import pytest
 import time
+from unittest import mock
 
-from cachet.cache import GenericCache
-from cachet.cache import decorator_constructor
-from cachet.cache import dict_cache
-from cachet.cache import io_cache
-from cachet.cache import sqlite_cache
+import pytest
+
+from cachet import decorator_constructor
+from cachet import dict_cache
+from cachet import GenericCache
+from cachet import io_cache
+from cachet import sqlite_cache
 
 
 def add_one_function(number):
@@ -18,7 +19,6 @@ def non_deterministic_function(seed):
 
 
 class SomeClass:
-
     def add_one_method(self, number):
         return add_one_function(number)
 
@@ -45,28 +45,26 @@ TEST_FUNCTIONS = (
 
 
 class TestGenericCache:
-
     def test_salt(self):
         cacher = decorator_constructor(GenericCache)
 
         function = mock.Mock(autospec=True)
-        function.__doc__ = ''
-        function.__qualname__ = ''
+        function.__doc__ = ""
+        function.__qualname__ = ""
         cache = cacher(function)
 
-        assert cache.__cache__._salt == b'b6c05fae026e3e1a'
+        assert cache.__cache__._salt == b"04c238b7df3e8d88"
 
 
 class TestCaches:
-
     @staticmethod
     def check_info(f, **fields):
         info = f.__cache__.info()
         for key, value in fields.items():
             assert info[key] == value
 
-    @pytest.mark.parametrize('cache', TEST_CACHES)
-    @pytest.mark.parametrize('function', TEST_FUNCTIONS)
+    @pytest.mark.parametrize("cache", TEST_CACHES)
+    @pytest.mark.parametrize("function", TEST_FUNCTIONS)
     def test_basic_caching_occurs(self, tmpdir, cache, function):
         cached = cache(tmpdir=tmpdir.strpath)(function)
         self.check_info(cached, expires=0, hits=0, misses=0, size=0)
@@ -91,8 +89,8 @@ class TestCaches:
 
         cached.__cache__.bust()
 
-    @pytest.mark.parametrize('cache', TEST_CACHES)
-    @pytest.mark.parametrize('function', TEST_FUNCTIONS)
+    @pytest.mark.parametrize("cache", TEST_CACHES)
+    @pytest.mark.parametrize("function", TEST_FUNCTIONS)
     def test_zero_ttl_only_expires(self, tmpdir, cache, function):
         cached = cache(tmpdir=tmpdir.strpath, ttl=0)(function)
         self.check_info(cached, expires=0, hits=0, misses=0, size=0)
@@ -108,8 +106,8 @@ class TestCaches:
 
         cached.__cache__.bust()
 
-    @pytest.mark.parametrize('cache', TEST_CACHES)
-    @pytest.mark.parametrize('function', TEST_FUNCTIONS)
+    @pytest.mark.parametrize("cache", TEST_CACHES)
+    @pytest.mark.parametrize("function", TEST_FUNCTIONS)
     def test_dunders_work_as_expected(self, tmpdir, cache, function):
         cached = cache(tmpdir=tmpdir.strpath)(function)
         self.check_info(cached, expires=0, hits=0, misses=0, size=0)
@@ -132,7 +130,7 @@ class TestCaches:
 
         cached.__cache__.bust()
 
-    @pytest.mark.parametrize('cache', TEST_CACHES)
+    @pytest.mark.parametrize("cache", TEST_CACHES)
     def test_non_deterministic_caching_works_as_expected(self, tmpdir, cache):
         function = non_deterministic_function
         output = function(seed=0)
@@ -155,7 +153,7 @@ class TestCaches:
 
         cached.__cache__.bust()
 
-    @pytest.mark.parametrize('function', TEST_FUNCTIONS)
+    @pytest.mark.parametrize("function", TEST_FUNCTIONS)
     def test_in_memory_sqllite_never_touches_tmpdir(self, tmpdir, function):
         cache = sqlite_cache
         cached = cache(tmpdir=tmpdir.strpath, in_memory=True)(function)

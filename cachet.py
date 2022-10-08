@@ -8,18 +8,26 @@ import pickle
 import sqlite3
 import time
 
-from cachet.exceptions import CacheMissException
-from cachet.exceptions import DontCacheException
-from cachet.exceptions import ExpiredKeyException
 
-
-DEFAULT_DIR = '/tmp'
+DEFAULT_DIR = "/tmp"
 DEFAULT_TTL = 24 * 60 * 60
+
+
+class CacheMissException(Exception):
+    pass
+
+
+class DontCacheException(Exception):
+    pass
+
+
+class ExpiredKeyException(Exception):
+    pass
 
 
 class GenericCache:
 
-    _salt = b''
+    _salt = b""
     _expires = _hits = _misses = 0
 
     def __init__(self, function, ttl=DEFAULT_TTL, tmpdir=DEFAULT_DIR):
@@ -27,10 +35,10 @@ class GenericCache:
         self.tmpdir = tmpdir
         module = inspect.getmodule(function)
         _salt = self.args_to_key(
-            module=module.__name__ if module is not None else '',
+            module=module.__name__ if module is not None else "",
             qualname=function.__qualname__,
         )
-        self._salt = bytes(_salt, 'utf8')
+        self._salt = bytes(_salt, "utf8")
 
     def __contains__(self, *args):
         try:
@@ -68,11 +76,11 @@ class GenericCache:
 
     def info(self):
         return {
-            'expires': self._expires,
-            'hits': self._hits,
-            'misses': self._misses,
-            'salt': self._salt,
-            'size': len(self),
+            "expires": self._expires,
+            "hits": self._hits,
+            "misses": self._misses,
+            "salt": self._salt,
+            "size": len(self),
         }
 
     @property
@@ -86,7 +94,7 @@ class GenericCache:
 
 class DictCache(GenericCache):
 
-    kv = {}
+    kv = {}  # type: ignore[var-annotated]
 
     def __delitem__(self, key):
         del self.kv[key]
@@ -113,13 +121,14 @@ class DictCache(GenericCache):
 
 
 class IOCache(GenericCache):
-
     @functools.lru_cache(maxsize=None)
     def key_to_filename(self, key):
-        return '/'.join((
-            self.tmpdir,
-            '.'.join(('', 'cache', key, 'gz')),
-        ))
+        return "/".join(
+            (
+                self.tmpdir,
+                ".".join(("", "cache", key, "gz")),
+            ),
+        )
 
     def __delitem__(self, filename):
         os.remove(filename)
@@ -129,7 +138,7 @@ class IOCache(GenericCache):
         if not os.path.isfile(filename):
             raise CacheMissException
 
-        with gzip.open(filename, 'rb') as f:
+        with gzip.open(filename, "rb") as f:
             value, expiration = pickle.load(f)
 
         if expiration < self.now:
@@ -138,36 +147,36 @@ class IOCache(GenericCache):
         return value
 
     def __iter__(self):
-        for filename in glob.glob('/'.join((self.tmpdir, '.cache.*.gz'))):
-            with gzip.open(filename, 'rb') as f:
+        for filename in glob.glob("/".join((self.tmpdir, ".cache.*.gz"))):
+            with gzip.open(filename, "rb") as f:
                 value, _ = pickle.load(f)
                 yield filename, value
 
     def __len__(self):
-        return len(glob.glob('/'.join((self.tmpdir, '.cache.*.gz'))))
+        return len(glob.glob("/".join((self.tmpdir, ".cache.*.gz"))))
 
     def __setitem__(self, key, value):
         filename = self.key_to_filename(key)
-        with gzip.open(filename, 'wb') as f:
+        with gzip.open(filename, "wb") as f:
             pickle.dump((value, self.expiration), f)
 
 
 class SqliteCache(GenericCache):
 
-    filename = '.cache.sqlite'
+    filename = ".cache.sqlite"
 
-    CONTAINS_SQL = 'SELECT COUNT(*) FROM kv WHERE (k = ?) AND (e > ?) ;'
-    CREATE_SQL = 'CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v BLOB, e FLOAT) ;'
-    DEL_SQL = 'DELETE FROM kv WHERE (k = ?) ;'
-    GET_SQL = 'SELECT v, e FROM kv WHERE (k = ?) ;'
-    ITER_SQL = 'SELECT k, v FROM kv ;'
-    LEN_SQL = 'SELECT COUNT(*) FROM kv ;'
-    SET_SQL = 'INSERT OR REPLACE INTO kv (k, v, e) VALUES (?, ?, ?) ;'
+    CONTAINS_SQL = "SELECT COUNT(*) FROM kv WHERE (k = ?) AND (e > ?) ;"
+    CREATE_SQL = "CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v BLOB, e FLOAT) ;"
+    DEL_SQL = "DELETE FROM kv WHERE (k = ?) ;"
+    GET_SQL = "SELECT v, e FROM kv WHERE (k = ?) ;"
+    ITER_SQL = "SELECT k, v FROM kv ;"
+    LEN_SQL = "SELECT COUNT(*) FROM kv ;"
+    SET_SQL = "INSERT OR REPLACE INTO kv (k, v, e) VALUES (?, ?, ?) ;"
 
     def __init__(self, *args, **kwargs):
-        in_memory = kwargs.pop('in_memory', False)
+        in_memory = kwargs.pop("in_memory", False)
         super().__init__(*args, **kwargs)
-        db_path = ':memory:' if in_memory else '/'.join((self.tmpdir, self.filename))
+        db_path = ":memory:" if in_memory else "/".join((self.tmpdir, self.filename))
         self.conn = sqlite3.connect(db_path)
         self.conn.execute(self.CREATE_SQL)
         self.conn.commit()
@@ -178,7 +187,7 @@ class SqliteCache(GenericCache):
 
     def __delitem__(self, key):
         with self.conn as c:
-            c.execute(self.DEL_SQL, (key, ))
+            c.execute(self.DEL_SQL, (key,))
 
     def _getitem(self, key):
         try:
@@ -194,7 +203,7 @@ class SqliteCache(GenericCache):
             yield key, pickle.loads(value)
 
     def __len__(self):
-        length, =  next(self.select_query(self.LEN_SQL))
+        (length,) = next(self.select_query(self.LEN_SQL))
         return length
 
     def __setitem__(self, key, value):
@@ -203,9 +212,7 @@ class SqliteCache(GenericCache):
 
 
 def decorator_constructor(cache_class, **outer_kwargs):
-
     def decorator(function):
-
         @functools.wraps(function)
         def returned(*args, **kwargs):
             key = the_cache.args_to_key(*args, **kwargs)
@@ -231,3 +238,10 @@ def decorator_constructor(cache_class, **outer_kwargs):
 dict_cache = functools.partial(decorator_constructor, DictCache)
 io_cache = functools.partial(decorator_constructor, IOCache)
 sqlite_cache = functools.partial(decorator_constructor, SqliteCache)
+
+__all__ = [
+    "dict_cache",
+    "io_cache",
+    "sqlite_cache",
+    DontCacheException.__name__,
+]
