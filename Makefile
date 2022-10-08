@@ -10,10 +10,9 @@ $(VENV_DIR): setup.py
 	@$@/bin/pip install --quiet --upgrade pip
 	@$@/bin/pip install --quiet .
 
-
 .PHONY: lint
 lint: requirements-dev-minimal.txt $(VENV_DIR)
-	@$(VENV_DIR)/bin/pip install --quiet --requirement $<
+	@$(VENV_DIR)/bin/pip install --quiet --requirement=$<
 	@$(VENV_DIR)/bin/pre-commit install
 	@$(VENV_DIR)/bin/pre-commit run --all-files
 
