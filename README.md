@@ -18,7 +18,7 @@ Unburden your functions and grant them the **cachet** they deserve ... with cach
 ## Install to the system
 
 ```bash
-pip install -e git+https://github.com/jeffseif/cachet.git#egg=cachet
+pip install git+https://github.com/jeffseif/cachet.git@main
 ```
 
 ## Use in a package
